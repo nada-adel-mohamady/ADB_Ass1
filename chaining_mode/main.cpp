@@ -84,12 +84,71 @@ int main(){
 
    //7. Display the final data base
    DisplayFile(filehandle);
+      
    // And Finally don't forget to close the file.
    close(filehandle);
-   return 0;
-
-
-
+   //return 0;
+//--------------------------------------------------------------------//
+//------------chaining ------test case 1 --------------------//
+//--------------------------------------------------------------------// 
+   printf("\n\n\n");
+   char filename1[] = "chaining2"; // inpute file name --make it args later
+   filehandle = createFile(FILESIZE, filename1);
+   DisplayFile(filehandle);
+   
+   // Add some data in the table
+   insert(1, 52);
+   insert(1, 12);
+   insert(1, 10); //colluison happen here , apply chaining
+   DisplayFile(filehandle);
+   insert(5,122);
+   insert(5,50);
+   DisplayFile(filehandle);
+   deleteItem(5);
+   DisplayFile(filehandle);
+   insert(5,78); //no colluison
+   DisplayFile(filehandle);
+   
+	
+//search not found element 
+	search(2); // key 2 not found
+//delete record in overflow area 
+    deleteItem(1);
+	DisplayFile(filehandle);
+	close(filehandle);
+	
+	 //--------------------------------------------------//
+	//------------chaining ----test case 2 ----//
+   //--------------------------------------------------//
+   printf("\n\n\n");
+   char filename2[] = "chaining3"; // inpute file name --make it args later
+   filehandle = createFile(FILESIZE, filename2);
+   DisplayFile(filehandle);
+   
+   // Add some data in the table
+   insert(9, 456);
+   insert(9, 123);
+   insert(19, 23);
+   insert(9, 12);
+   insert(9, 11);
+   DisplayFile(filehandle);
+   insert(2,122);
+   insert(2,50);
+   insert(2,1);
+   DisplayFile(filehandle);
+   deleteItem(5);// try to delete not found item 
+   DisplayFile(filehandle);
+   insert(5,78); //no colluison
+   DisplayFile(filehandle);
+  
+//search not found element 
+	search(2); // key 2 not found
+//delete record in overflow area 
+    deleteItem(9);
+	DisplayFile(filehandle);
+	insert(9,2);
+	DisplayFile(filehandle);
+	close(filehandle);
 }
 
 /* functionality: insert the (key,data) pair into the database table

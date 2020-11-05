@@ -132,7 +132,6 @@ int searchItem(int fd,struct DataItem* item,int *count)
     		Offset +=sizeof(DataItem);  //move the offset to next record
 			records_counter++;
 			if(records_counter>=RECORDSPERBUCKET){ // bucket is full 
-			printf("hena el debug %d\n", *count);
 			// search at overflow area 
 			int startOffsetOverflow = MBUCKETS*BUCKETSIZE;
 			for(int offset=startOffsetOverflow;offset<FILESIZE;offset += sizeof(DataItem)){
