@@ -8,34 +8,11 @@ int hashCode(int key){
    return key % MBUCKETS;
 }
 
-
-/* Functionality insert the data item into the correct position
- *          1. use the hash function to determine which bucket to insert into
- *          2. search for the first empty space within the bucket
- *          	2.1. if it has empty space
- *          	           insert the item
- *          	     else
- *          	          use chaining to insert the record
- *          3. return the number of records accessed (searched)
- *
- * Input:  fd: filehandler which contains the db
- *         item: the dataitem which should be inserted into the database
- *
- * Output: No. of record searched
- *
- * Hint: You can check the search function to give you some insights
- * Hint2: Don't forget to set the valid bit = 1 in the data item for the rest of functionalities to work
- * Hint3: you will want to check how to use the pwrite function using man pwrite on the terminal
- * 			 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
- *
- * 	pwrite() writes up to count bytes from the buffer starting  at  buf  to
-       the  file  descriptor  fd  at  offset  offset.
- */
 int insertItem(int fd,DataItem item){
    //TODO: implement this function
    // use the hash function to determine which bucket to insert into 
    int hashIndex = hashCode(item.key);
-   struct DataItem data;   //a variable to read in it the records from the db
+   struct Bucket bkt;   //a variable to read in it the records from the db
    //check if collision happen 
     int saveOffset;
 	int count = 0;
@@ -45,77 +22,63 @@ int insertItem(int fd,DataItem item){
 	//Main Loop
 	RESEEK:
 	//on the linux terminal use man pread to check the function manual
-	ssize_t result = pread(fd,&data,sizeof(DataItem), Offset);
+	ssize_t result = pread(fd,&bkt,sizeof(Bucket), Offset);
 	saveOffset=Offset;
 	//one record accessed
 	 count++;
 	//check whether it is a valid record or not
-    if(data.valid==0 || result==0) //empty space
-	{ 	 // perror("some error occurred in pread");
-	// empty record 
-	// insert into it 
-	//printf("normal insert at %d\n",hashIndex);
-	item.overflowPointer=-1; // no overflow ocurred 
-    pwrite(fd,&item,sizeof(item), Offset);	
-	
-	return count;
-    }
-   else { // this is not an empty record 
-   
-        Offset +=sizeof(DataItem);  //move the offset to next record
-		records_counter++; //increment counter of records within one bucket
-    	if(records_counter>=RECORDSPERBUCKET){
-			// apply chaining 		
-			//printf("apply chaining this bucket is full \n");
-			// 
-			int startOffsetOverflow = MBUCKETS*BUCKETSIZE;
-			for(int offset=startOffsetOverflow;offset<FILESIZE;offset += sizeof(DataItem)){
-				struct DataItem tmp;
-				ssize_t result = pread(fd,&tmp,sizeof(DataItem), offset);
-				count++;
-				if(result==0||tmp.valid==0){// unused overflow area
-					pwrite(fd,&item,sizeof(item), offset);
-					data.overflowPointer=offset;
-					pwrite(fd,&data,sizeof(DataItem), saveOffset);
-					return count;
-				}
-			}
+	for(int i=0;i<RECORDSPERBUCKET;i++){
+		if(bkt.dataItem[i].valid==0 || result==0) //empty space
+			{ 	
+			// empty record 
+			// insert into it
+				bkt.dataItem[i] = item;// no overflow ocurred 
+				bkt.overflowPointer=-1;
+				pwrite(fd,&bkt,sizeof(Bucket), Offset);	
+			
 			return count;
-		}
+			}
+			count++;
+	}
+   
+	// bucket is full
+	// apply chaining 	 	
+			int startOffsetOverflow = MBUCKETS*BUCKETSIZE;
+			for(int offset=startOffsetOverflow;offset<FILESIZE;offset += sizeof(Bucket)){
+				struct Bucket tmp;
+				ssize_t result = pread(fd,&tmp,sizeof(Bucket), offset);
+				for(int i=0;i<RECORDSPERBUCKET;i++){
+					count++;
+					if(result==0||tmp.dataItem[i].valid==0){// unused overflow area
+						pwrite(fd,&item,sizeof(item), offset+i*sizeof(DataItem));
+						bkt.overflowPointer=offset;
+						pwrite(fd,&bkt,sizeof(Bucket), saveOffset);
+						return count;
+					}
+				}
+			
+			}
+			return count;	
     	goto RESEEK;
     }
 	
-}
 
-
-/* Functionality: using a key, it searches for the data item
- *          1. use the hash function to determine which bucket to search into
- *          2. search for the element starting from this bucket and till it find it.
- *          3. return the number of records accessed (searched)
- *
- * Input:  fd: filehandler which contains the db
- *         item: the dataitem which contains the key you will search for
- *               the dataitem is modified with the data when found
- *         count: No. of record searched
- *
- * Output: the in the file where we found the item
- */
 
 int searchItem(int fd,struct DataItem* item,int *count)
 {
 
 	//Definitions
 	struct DataItem data;   //a variable to read in it the records from the db
+	struct Bucket bkt; // a variable to read in it the bucket from the database 
 	*count = 0;				//No of accessed records
 	int rewind = 0;			//A flag to start searching from the first bucket
 	int hashIndex = hashCode(item->key);  				//calculate the Bucket index
 	int startingOffset = hashIndex*BUCKETSIZE;		//calculate the starting address of the bucket
 	int Offset = startingOffset;						//Offset variable which we will use to iterate on the db
-    int records_counter = 0; //  count records within one bucket
 	//Main Loop
 	RESEEK:
 	//on the linux terminal use man pread to check the function manual
-	ssize_t result = pread(fd,&data,sizeof(DataItem), Offset);
+	ssize_t result = pread(fd,&bkt,sizeof(Bucket), Offset);
 	//one record accessed
 	(*count)++;
 	//check whether it is a valid record or not
@@ -123,38 +86,38 @@ int searchItem(int fd,struct DataItem* item,int *count)
 	{ 	 // perror("some error occurred in pread");
 		  return -1;
     }
-    else if (data.valid == 1 && data.key == item->key) {
-    	//I found the needed record
-    			item->data = data.data ;
-    			return Offset;
-
-    } else { //not the record I am looking for
-    		Offset +=sizeof(DataItem);  //move the offset to next record
-			records_counter++;
-			if(records_counter>=RECORDSPERBUCKET){ // bucket is full 
-			// search at overflow area 
-			int startOffsetOverflow = MBUCKETS*BUCKETSIZE;
-			for(int offset=startOffsetOverflow;offset<FILESIZE;offset += sizeof(DataItem)){
-				(*count)++;
-				ssize_t result = pread(fd,&data,sizeof(DataItem), offset);
-				if(data.valid==1 && data.key == item->key){ // found
-					ssize_t result = pread(fd,&data,sizeof(DataItem), offset);
-					return offset;
-				}
-			}
-				
-			}
-    		if(Offset >= FILESIZE && rewind ==0 )
-    		 { //if reached end of the file start again
-    				rewind = 1;
-    				Offset = 0;
-    				goto RESEEK;
-    	     } else
-    	    	  if(rewind == 1 && Offset >= startingOffset) {
-    				return -1; //no empty spaces
-    	     }
-    		goto RESEEK;
-    }
+	for(int i=0;i<RECORDSPERBUCKET;i++){
+		if (bkt.dataItem[i].valid == 1 && bkt.dataItem[i].key == item->key) {
+			// found needed record
+			item->data = bkt.dataItem[i].data;
+			return Offset+i*sizeof(DataItem);
+		}
+		(*count)++;
+	}
+     //not the record I am looking for
+	Offset +=sizeof(DataItem);  //move the offset to next record
+	// search at overflow area 
+	int startOffsetOverflow = MBUCKETS*BUCKETSIZE;
+	for(int offset=startOffsetOverflow;offset<FILESIZE;offset += sizeof(DataItem)){
+		(*count)++;
+		ssize_t result = pread(fd,&data,sizeof(DataItem), offset);
+		if(data.valid==1 && data.key == item->key){ // found
+			ssize_t result = pread(fd,&data,sizeof(DataItem), offset);
+			return offset;
+		}
+	}
+					
+	if(Offset >= FILESIZE && rewind ==0 )
+	 { //if reached end of the file start again
+			rewind = 1;
+			Offset = 0;
+			goto RESEEK;
+	 } else
+		  if(rewind == 1 && Offset >= startingOffset) {
+			return -1; //no empty spaces
+	 }
+	goto RESEEK;
+    
 }
 
 
@@ -166,48 +129,55 @@ int searchItem(int fd,struct DataItem* item,int *count)
  */
 int DisplayFile(int fd){
 
-	struct DataItem data;
 	struct Bucket bkt;
 	int count = 0;
 	int Offset = 0;
 	int BucketOffset=0; // offset for bucket
 	int bktSize = sizeof(Bucket);
-	for(Offset =0; Offset< FILESIZE/2;Offset += sizeof(DataItem))
+	int dataSize = sizeof(DataItem);
+	for(Offset =0; Offset< FILESIZE/2;Offset += sizeof(Bucket))
 	{
-		ssize_t result = pread(fd,&data,sizeof(DataItem), Offset);
+		ssize_t result = pread(fd,&bkt,sizeof(Bucket), Offset);
 	//	printf("hena el bucket awl elem feh %d\n", bkt.dataItem[0].data);
 		BucketOffset+=bktSize;//increament offset of bucket
-		if(result < 0)
-		{ 	  perror("some error occurred in pread");
-			  return -1;
-		} else if (result == 0 || data.valid == 0 ) { //empty space found or end of file
-			printf("Bucket: %d, Offset %d:~\n",Offset/bktSize,Offset);
-		} else {
-			pread(fd,&data,sizeof(DataItem), Offset);
-			if(data.overflowPointer==-1)
-				printf("Bucket: %d, Offset: %d, Data: %d, key: %d\n",Offset/bktSize,Offset,data.data,data.key);
-			else
-				printf("Bucket: %d, Offset: %d, Data: %d, key: %d, Points to Overflow offset : %d\n",Offset/bktSize,Offset,data.data,data.key,data.overflowPointer);
-			count++;
+		for(int i=0;i<RECORDSPERBUCKET;i++){
+				if(result < 0)
+				{ 	  perror("some error occurred in pread");
+					  return -1;
+				} else if (result == 0 || bkt.dataItem[i].valid == 0 ) { //empty space found or end of file
+					printf("Bucket: %d, Offset %d:~\n",Offset/bktSize,Offset+i*dataSize);
+				} else {
+					pread(fd,&bkt,sizeof(Bucket), Offset);					
+					printf("Bucket: %d, Offset: %d, Data: %d, key: %d \n",Offset/bktSize,Offset+i*dataSize, bkt.dataItem[i].data, bkt.dataItem[i].key);
+					count++;
+				}
 		}
+		
+		if(bkt.dataItem[1].valid==1 && bkt.overflowPointer!=-1){
+			printf("Bucket: %d points to overflow location at %d\n",Offset/bktSize, bkt.overflowPointer);
+		}
+		
 	}
 	
 	// overflow area
 	printf("starting overflow area \n");
-	for(Offset =FILESIZE/2; Offset< FILESIZE;Offset += sizeof(DataItem))
+	for(Offset =FILESIZE/2; Offset< FILESIZE;Offset += sizeof(Bucket))
 	{
-		ssize_t result = pread(fd,&data,sizeof(DataItem), Offset);
-		if(result < 0)
-		{ 	  perror("some error occurred in pread");
-			  return -1;
-		} else if (result == 0 || data.valid == 0 ) { //empty space found or end of file
-			printf("Offset %d:~\n",Offset);
-		} else {
-			pread(fd,&data,sizeof(DataItem), Offset);
-			printf("Offset: %d, Data: %d, key: %d\n",Offset,data.data,data.key);
-					 count++;
+		ssize_t result = pread(fd,&bkt,sizeof(Bucket), Offset);
+		for(int i=0;i<RECORDSPERBUCKET;i++){
+			if(result < 0)
+			{ 	  perror("some error occurred in pread");
+				  return -1;
+			} else if (result == 0 || bkt.dataItem[i].valid == 0 ) { //empty space found or end of file
+				printf("Offset %d:~\n",Offset+i*dataSize);
+			} else {
+				
+				printf("Offset: %d, Data: %d, key: %d\n",Offset+i*dataSize,bkt.dataItem[i].data,bkt.dataItem[i].key);
+						 count++;
+			}
 		}
 	}
+	
 	return count;
 }
 
@@ -225,7 +195,7 @@ int deleteOffset(int fd, int Offset)
 	dummyItem.valid = 0;
 	dummyItem.key = -1;
 	dummyItem.data = 0;
-	dummyItem.overflowPointer=-1;
+	//dummyItem.overflowPointer=-1;
 	int result = pwrite(fd,&dummyItem,sizeof(DataItem), Offset);
 	return result;
 }

@@ -108,8 +108,12 @@ int main(){
    DisplayFile(filehandle);
    insert(5,78); //no colluison
    DisplayFile(filehandle);
-   
-	
+   deleteItem(1);
+   DisplayFile(filehandle);
+   deleteItem(1);
+   DisplayFile(filehandle);
+   deleteItem(1);
+	DisplayFile(filehandle);
 //search not found element 
 	search(2); // key 2 not found
 //delete record in overflow area 

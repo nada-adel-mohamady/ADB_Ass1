@@ -26,14 +26,13 @@ struct DataItem {
    int valid;    //) means invalid record, 1 = valid record
    int data;     
    int key;
-    int overflowPointer; //pointer to unused overflow locations 
 };
 
 
 //Each bucket contains number of records
 struct Bucket {
 	struct DataItem  dataItem[RECORDSPERBUCKET];
-	
+	int overflowPointer; //pointer to unused overflow locations 
 };
 
 //Check the create File
